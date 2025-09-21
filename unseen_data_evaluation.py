@@ -68,4 +68,6 @@ def run_pipeline_on_unseen_data(subject_ids ,client):
 	pred_logits = predict_logits(model, X, mask)
 	probs_BCE_cal_test = predict_proba_calibrated(models_params['calibrator'], pred_logits)
 	
-	return()
+	fin_df = pd.DataFrame(probs_BCE_cal_test, columns=['mortality_proba', 'prolonged_LOS_proba', 'readmission_proba'])
+	fin_df['subject_id'] = fin_subject_ids
+	return(fin_df)

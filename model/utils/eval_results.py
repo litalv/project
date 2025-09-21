@@ -6,7 +6,7 @@ from sklearn.metrics import roc_auc_score, average_precision_score, accuracy_sco
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import brier_score_loss
 
-def eval_multitask_from_probs(y_true, probs, plot=True, tr=0.5, task_names = ["prolonged_stay", "mortality", "readmission"]):
+def eval_multitask_from_probs(y_true, probs, plot=True, tr=0.5, task_names = ["a", "b", "b"]):
 	"""
 	y_true, probs: shape (N, 3) — per-patient labels and predicted probabilities.
 	Returns dict of metrics per task. If plot=True, draws ROC, PR, and confusion matrix.
@@ -27,8 +27,8 @@ def eval_multitask_from_probs(y_true, probs, plot=True, tr=0.5, task_names = ["p
 		pt = (pt_probs >= tr).astype(int)
 
 		acc = accuracy_score(yt, pt) # share of correct predictions
-		f1 = f1_score(yt, pt) # balancing false positives/negatives
-		ppv = precision_score(yt, pt)
+		f1 = f1_score(yt, pt, zero_division=0) # balancing false positives/negatives
+		ppv = precision_score(yt, pt, zero_division=0)
 
 		report[name] = {
 			"roc_auc": float(roc_auc),

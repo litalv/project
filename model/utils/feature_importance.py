@@ -68,76 +68,7 @@ def get_batches(X, y, mask, batch_size=64, p_per_task=6, n_batches=2, seed=42):
     Xb, Mb = Xb[keep_bg], Mb[keep_bg]
     return Xb, Mb
 
-def feature_importance(model, task_idx, X_train, y_train, mask_train, X_test, y_test, mask_test, fnames, batch_size=64, p_per_task=6, n_batches_train=10, n_batches_test=10):
-    X_bg, M_bg = get_batches(X_train, y_train, mask=mask_train, batch_size=batch_size, p_per_task=p_per_task, n_batches=n_batches_train)
-    X_ev, M_ev = get_batches(X_test, y_test, mask=mask_test, batch_size=batch_size, p_per_task=p_per_task, n_batches=n_batches_test)
-
-    # pack mask as last channel
-    Xbg_cat = stack_X_and_M(X_bg, M_bg) # (B,T,D+1)
-    Xev_cat = stack_X_and_M(X_ev, M_ev)
-
-    # build wrapper
-    wrapped = TorchSeqWrapper(model, task_idx=task_idx, device="cpu")
-    # build explainer
-    explainer = shap.GradientExplainer(wrapped, to_torch(Xbg_cat))
-    sv = explainer(to_torch(Xev_cat), nsamples=500)
-    vals = np.asarray(sv.values)[..., 0] 
-
-    # drop mask channel (last feature)
-    vals_feat = vals[..., :-1] # (Ne, T, F)
-    X_feat = Xev_cat[..., :-1] # (Ne, T, F)
-    Ne, T, F = vals_feat.shape
-
-    # global mean |SHAP| per feature averaged over all patients and all time steps
-    mean_abs_feat = np.abs(vals_feat).mean(axis=(0, 1)).reshape(-1)  # (F,)
-    order = np.argsort(mean_abs_feat)[::-1]
-    ranked = [(fnames[int(i)], float(mean_abs_feat[int(i)])) for i in order]
-
-    # Bar plot (top-k) - which features matter most overall
-    topk = min(25, F); idx = order[:topk]
-    plt.figure(figsize=(6, 5))
-    plt.barh([fnames[int(i)] for i in idx[::-1]], mean_abs_feat[idx][::-1])
-    plt.title(f"SeqModel Mean |SHAP| by Feature (task {task_idx})")
-    plt.tight_layout(); plt.show()
-
-    # mean absolute SHAP per (time step, feature), averaged over patients
-    mean_abs_ft = np.abs(vals_feat).mean(axis=0)  # (T, F)
-    # Feature×time heatmap - when (which time steps) each feature matters (to spot temporal patterns)
-    plt.figure(figsize=(10, 6))
-    plt.imshow(mean_abs_ft[:, idx].T, aspect="auto", interpolation="nearest")
-    plt.yticks(range(topk), [fnames[int(i)] for i in idx])
-    plt.xlabel("Time step"); plt.title(f"Mean |SHAP| Heatmap (feature×time, task {task_idx})")
-    plt.colorbar(label="|SHAP|"); plt.tight_layout(); plt.show()
-
-    # Beeswarm-like (flatten time)
-    # How each (feature@time) pushes predictions up/down across patients
-    def _base_vals_or_none(sv, Ne):
-        b = getattr(sv, "base_values", None) or getattr(sv, "expected_value", None)
-        if b is None:
-            return None
-        b = np.asarray(b)
-        if b.ndim == 0:
-            return np.full(Ne, float(b))
-        return b.reshape(Ne, -1).mean(axis=1)
-
-    bv = _base_vals_or_none(sv, Ne)
-
-    flat_vals = vals_feat.reshape(Ne, -1)                # (Ne, T*F)
-    flat_data = X_feat.reshape(Ne, -1)                   # (Ne, T*F)
-    names_flat = [f"{f}@t{t}" for t in range(T) for f in fnames]
-
-    kwargs = dict(values=flat_vals, data=flat_data, feature_names=names_flat)
-    if bv is not None:
-        kwargs["base_values"] = bv
-
-    exp_flat = shap.Explanation(**kwargs)
-    shap.plots.beeswarm(exp_flat, max_display=30, show=False)
-    plt.title(f"Beeswarm (top 30 feat@time, task {task_idx})")
-    plt.tight_layout(); plt.show()
-
-    return ranked
-
-def feature_importance_pretty(
+def feature_importance(
     model, task_idx, X_train, y_train, mask_train, X_test, y_test, mask_test, fnames,
     batch_size=64, p_per_task=6, n_batches_train=10, n_batches_test=10,
     topk=20,

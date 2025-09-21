@@ -22,7 +22,7 @@ class SupConLoss(nn.Module):
 	Goal is so that similar patients (same label) be close in latent space, and patients with different labels be far apart.
 	
 	anchor_mode:
-	  - "both"       : all samples are anchors (standard SupCon)
+	  - "both"	   : all samples are anchors (standard SupCon)
 	  - "positives"  : only y==1 rows are anchors (useful for rare positives) 
 	temperature: controls how “peaky” the softmax is """
 	def __init__(self, temperature=0.2, anchor_mode="both"):
@@ -32,7 +32,7 @@ class SupConLoss(nn.Module):
 	
 	def forward(self, z, y):
 		""" z : (B, D) embeddings that will be L2-normalized 
-		    y : (B,)   labels in {0,1} for this ONE task """
+			y : (B,)   labels in {0,1} for this ONE task """
 		
 		B = z.size(0)
 		# cosine similarity matrix
@@ -66,3 +66,9 @@ class SupConLoss(nn.Module):
 			return loss_i[valid].mean()
 		else:
 			return z.new_tensor(0.0) # no valid anchors in batch
+
+def focal_bce_with_logits(logits, targets, pos_weight, gamma=1.5):
+	bce = F.binary_cross_entropy_with_logits(logits, targets, pos_weight=pos_weight, reduction='none')
+	p   = torch.sigmoid(logits).detach()
+	pt  = torch.where(targets==1, p, 1-p)
+	return ((1-pt).pow(gamma) * bce).mean()

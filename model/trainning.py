@@ -6,21 +6,21 @@ from torch.utils.data import Dataset, DataLoader, Sampler
 
 from model.dataset import TimeSeriesDataset, BalancedPositivesPerTaskSampler
 from model.model import MultiTaskSeqGRUAE
-from model.loss import masked_mse, SupConLoss
+from model.loss import masked_mse, SupConLoss, focal_bce_with_logits
 
 import os, random
 
 def set_seed(seed: int = 42):
-    os.environ["PYTHONHASHSEED"] = str(seed)
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    # deterministic (slower but repeatable)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    # optional, stricter determinism:
-    # torch.use_deterministic_algorithms(True)
+	os.environ["PYTHONHASHSEED"] = str(seed)
+	random.seed(seed)
+	np.random.seed(seed)
+	torch.manual_seed(seed)
+	torch.cuda.manual_seed_all(seed)
+	# deterministic (slower but repeatable)
+	torch.backends.cudnn.deterministic = True
+	torch.backends.cudnn.benchmark = False
+	# optional, stricter determinism:
+	# torch.use_deterministic_algorithms(True)
 
 # ---------- Training ----------
 def train_multitask_seq_ae(
@@ -29,22 +29,27 @@ def train_multitask_seq_ae(
 		batch_size=64,
 		p_per_task=4,
 		epochs=20,
-		warmup_epochs=3,
-		warmup_scales=(0.0, 0.0, 1.0),
-		latent_dim=64, 
-		max_lr=1e-3,
-		min_lr=1e-4,
-		SupCon_latent_dim=32,
-		lambda_recon=1.0,
-		lambda_bce=1.0,
-		lambda_supcon=0.5,
+		scale_warmup_epochs=0,
+		lr_warmup_epochs=8,
+
+		warmup_scales={'lambda_recon':0.0, 'lambda_bce':0.0, 'lambda_supcon':0.0},
+		scales={'lambda_recon':1.0, 'lambda_bce':1.0, 'lambda_supcon':0.5},
+
+		warmup_lrs={'AE':0.5,'BCE':[1.0,1.0,1.2],'SupCon':0.5},
+		lrs={'AE':5e-4, 'BCE':[5e-4,5e-4,6e-4], 'SupCon':2e-3},# {'AE':j[0], 'BCE':j[1:4], 'SupCon':j[4]},#
+
+		latent_dim=80, 
+		SupCon_latent_dim=16,
+
+		pooling_mode = "mean+final", # "final", "mean+final", "mean+max+final", "mean+attn"
+
 		weights_bce=[1,1,1],
 		weights_supcon=[1,1,1],
-		pooling_mode = "final",
-		device="cuda" if torch.cuda.is_available() else "cpu",
-		temperature=[0.12,0.07],
+		temperature=0.07,
 		supcon_gamma=0.7,   # CB exponent (0.5–0.8 is gentle)
 		supcon_delta=0.5,   # inverse-anchors exponent (0.3–0.7)
+
+		device="cuda" if torch.cuda.is_available() else "cpu",
 		seed=0):
 	""" this function trains the multi-task GRU autoencoder with three losses at once:
 	 * Reconstruction (masked MSE)
@@ -64,12 +69,12 @@ def train_multitask_seq_ae(
 	# def model and loss objects
 	model = MultiTaskSeqGRUAE(input_dim=input_dim, latent_dim=latent_dim, SupCon_latent_dim=SupCon_latent_dim, pooling=pooling_mode).to(device)
 	opt = torch.optim.Adam([
-		{"params": model.encoder.parameters(), "lr": max_lr},
-		{"params": model.decoder.parameters(), "lr": max_lr},
-		{"params": model.cls_heads[0].parameters(), "lr": max_lr}, # prolonged
-		{"params": model.cls_heads[1].parameters(), "lr": max_lr}, # mortality
-		{"params": model.cls_heads[2].parameters(), "lr": min_lr}, # READMISSION
-		{"params": model.proj_heads.parameters(), "lr": 1e-3},
+		{"params": model.encoder.parameters(), "lr": lrs['AE']},
+		{"params": model.decoder.parameters(), "lr": lrs['AE']},
+		{"params": model.cls_heads[0].parameters(), "lr": lrs['BCE'][0]}, # mortality
+		{"params": model.cls_heads[1].parameters(), "lr": lrs['BCE'][1]}, # prolonged
+		{"params": model.cls_heads[2].parameters(), "lr": lrs['BCE'][2]}, # READMISSION
+		{"params": model.proj_heads.parameters(), "lr": lrs['SupCon']},
 	])
 
 	# numerically stable BCE (Binary Cross-Entropy) with per-task class weights to balance rare posives
@@ -81,12 +86,18 @@ def train_multitask_seq_ae(
 		running = {"recon": 0.0, "bce": 0.0, "supcon": 0.0, "total": 0.0}
 		n_batches = 0
 
-		warmup_phase = (ep <= warmup_epochs)
-		cur_lambda_recon, cur_lambda_bce, cur_lambda_supcon = (warmup_scales if warmup_phase else (lambda_recon, lambda_bce, lambda_supcon))
+		# setup weights and scales for wormup
+		scale_warmup_phase = (ep <= scale_warmup_epochs)
+		cur_lambda_recon, cur_lambda_bce, cur_lambda_supcon = ((warmup_scales['lambda_recon'], warmup_scales['lambda_bce'], warmup_scales['lambda_supcon']) if scale_warmup_phase else (scales['lambda_recon'], scales['lambda_bce'], scales['lambda_supcon']))
+
+		lr_warmup_phase = warmup_lrs if ep <= lr_warmup_epochs else lrs
+		lrs_ = [lr_warmup_phase['AE'], lr_warmup_phase['AE'], lr_warmup_phase['BCE'][0], lr_warmup_phase['BCE'][1], lr_warmup_phase['BCE'][2], lr_warmup_phase['SupCon']]
+		for pg, lr in zip(opt.param_groups, lrs_):
+			pg['lr'] = lr
 
 		# SupCon per task, positives-only anchors for the rare targets mort and read
-		sup_rare = SupConLoss(temperature=temperature[1], anchor_mode="positives")  # rare
-		sup_5050 = SupConLoss(temperature=temperature[0], anchor_mode="both")       # ~50/50
+		sup_5050 = SupConLoss(temperature=temperature, anchor_mode="both")	   # ~50/50
+		sup_rare = SupConLoss(temperature=temperature, anchor_mode="positives")  # rare
 	
 		for xb, yb, mb, lb in loader: # batch loop 
 			# xb = inputs (B,T,D), yb = labels (B,3), mb = mask (B,T), lb = lengths (B,)
@@ -106,10 +117,10 @@ def train_multitask_seq_ae(
 			loss_bce = loss_bce * (cur_lambda_bce / 3.0)
 			
 			# automaticaly append prolonged_stay (~50/50)
-			sup_terms = [sup_5050(model.project(z, 0), yb[:, 0])]
-			task_ids = [0]
+			sup_terms = [sup_5050(model.project(z, 1), yb[:, 1])]
+			task_ids = [1]
 			# for each of the rare cases append only if there are anchors (pos samples) in the batch 
-			for i in [1,2]:
+			for i in [0,2]:
 				if (yb[:, i].sum() >= 2):
 					sup_terms.append(sup_rare(model.project(z, i), yb[:, i]))
 					task_ids.append(i)

@@ -1,17 +1,18 @@
 import pandas as pd
 import numpy as np
 import pickle as pkl
+import torch
 
 import duckdb
 # Mount Google Drive
 from google.colab import drive
 drive.mount('/content/drive')
 
-from preprocessing.utils import load_file, sql_from_MIMICIII, age, ethnicity_to_ohe, split_data, data_norm, imputation_by_baseline, generate_series_data
-from preprocessing.config import get_config
-from preprocessing.preprocess_pipeline import preprocess_data
+from project.preprocessing.utils import load_file, sql_from_MIMICIII, age, ethnicity_to_ohe, split_data, data_norm, imputation_by_baseline, generate_series_data
+from project.preprocessing.config import get_config
+from project.preprocessing.preprocess_pipeline import preprocess_data
 
-from model.model import MultiTaskSeqGRUAE
+from project.model.model import MultiTaskSeqGRUAE
 
 def run_pipeline_on_unseen_data(subject_ids ,client):
 	"""
@@ -30,11 +31,12 @@ def run_pipeline_on_unseen_data(subject_ids ,client):
 							- readmission_proba: Prediction probabilities for readmission.
 	:rtype: pandas.DataFrame
 	"""
+	device="cuda" if torch.cuda.is_available() else "cpu"
 	# import models configuration params
 	config_dict = get_config()
 	
 	# read the full train_features list and Standardization and Imputation params from the train data 
-	with open(f"pre-processing/{config_dict['data_paths']['DATA_PATH']}/models_params_dict.pkl", 'rb') as f:
+	with open(f"project/model/models_params_dict.pkl", 'rb') as f:
 		models_params = pkl.load(f)
 	
 	# preprocess_datax`
@@ -49,7 +51,7 @@ def run_pipeline_on_unseen_data(subject_ids ,client):
 	# Standardization (scaler fitted by TRAIN only)
 	X, _ = data_norm(X, models_params["numeric_cols"], scaler=models_params["scaler"])
 	# Imputation by first day baseline (baseline calced by TRAIN only)
-	X, _ = imputation_by_baseline(X, models_params["numeric_cols"], baseline=models_params["imputation_baseline"])
+	X, _ = imputation_by_baseline(X, models_params["numeric_cols"], baseline=models_params["baseline"])
 	X = X.fillna(0)
 	X = X.drop(columns=['admittime']).reset_index(drop=True)
 	
@@ -61,7 +63,7 @@ def run_pipeline_on_unseen_data(subject_ids ,client):
 	
 	# load trained model 
 	model = MultiTaskSeqGRUAE(input_dim=X.shape[-1], latent_dim=64, SupCon_latent_dim=32, pooling="mean+max+final")
-	model.load_state_dict(torch.load("model.pt", weights_only=True))
+	model.load_state_dict(torch.load("project/model/model.pt", weights_only=True))
 	model.eval()
 	
 	# run model 

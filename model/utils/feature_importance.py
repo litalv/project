@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 import torch, copy
 from torch.utils.data import DataLoader
-from model.dataset import TimeSeriesDataset, BalancedPositivesPerTaskSampler 
+from project.model.dataset import TimeSeriesDataset, BalancedPositivesPerTaskSampler 
 import torch.nn as nn
 
 class TorchSeqWrapper(nn.Module):

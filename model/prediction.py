@@ -17,7 +17,7 @@ def predict_proba(model, X, mask, device=None):
 		device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 		ds = TimeSeriesDataset(X, np.zeros((X.shape[0], 3)), mask)
 		loader = DataLoader(ds, batch_size=128, shuffle=False)
-		model.eval()
+		model.to(torch.device(device)).eval()
 
 		probs_all = []
 		for xb, _, _, lb in loader: # Loops over batches
@@ -33,7 +33,7 @@ def predict_logits(model, X, mask, device=None):
 		device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 		ds = TimeSeriesDataset(X, np.zeros((X.shape[0], 3)), mask)
 		loader = DataLoader(ds, batch_size=128, shuffle=False)
-		model.eval()
+		model.to(torch.device(device)).eval()
 
 		logits_all = []
 		for xb, _, _, lb in loader: # Loops over batches
@@ -49,7 +49,7 @@ def encode_embeddings(model, X, mask, device=None, batch_size=128):
 	""" Returns embeddings for each patient """
 	with torch.no_grad():
 		device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-		model.eval()
+		model.to(torch.device(device)).eval()
 
 		# dummy y just to satisfy the Dataset signature
 		ds = TimeSeriesDataset(X, np.zeros((X.shape[0], 3), dtype=np.float32), mask)

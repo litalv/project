@@ -7,10 +7,10 @@ import duckdb
 # Mount Google Drive
 from google.colab import drive
 
-from utils import load_file, sql_from_MIMICIII, age, ethnicity_to_ohe, generate_series_data, _word2pat, _map_drug_name_2_category, _site_from_specimen_type
-from config import get_config
-from sql import get_sql_queries
-from name_keywords import get_keywords_cat
+from project.preprocessing.utils import load_file, sql_from_MIMICIII, age, ethnicity_to_ohe, generate_series_data, _word2pat, _map_drug_name_2_category, _site_from_specimen_type
+from project.preprocessing.config import get_config
+from project.preprocessing.sql import get_sql_queries
+from project.preprocessing.name_keywords import get_keywords_cat
 
 
 def _ICU_preprocess(con, icu_sql, subject_ids, config_dict):

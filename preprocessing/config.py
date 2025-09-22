@@ -2,7 +2,7 @@
 
 # needed data file paths 
 paths = {
-	"DATA_PATH": "./data", # data root directory
+	"DATA_PATH": "./project/preprocessing/data", # data root directory
 	"INITIAL_COHORT": "initial_cohort.csv",
 	"LABS_METADATA": "labs_metadata.csv",
 	"VITALS_METADATA": "vital_metadata.csv",

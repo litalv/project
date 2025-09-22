@@ -3,7 +3,7 @@ import numpy as np
 import torch
 
 from torch.utils.data import DataLoader
-from model.dataset import TimeSeriesDataset
+from project.model.dataset import TimeSeriesDataset
 
 from sklearn.neighbors import NearestNeighbors
 from sklearn.linear_model import LogisticRegression

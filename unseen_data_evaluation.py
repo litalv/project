@@ -12,6 +12,7 @@ from project.preprocessing.utils import load_file, sql_from_MIMICIII, age, ethni
 from project.preprocessing.config import get_config
 from project.preprocessing.preprocess_pipeline import preprocess_data
 
+from project.model.prediction import predict_proba, encode_embeddings, predict_proba_knn, predict_logits, predict_proba_calibrated
 from project.model.model import MultiTaskSeqGRUAE
 
 def run_pipeline_on_unseen_data(subject_ids ,client):
@@ -63,8 +64,8 @@ def run_pipeline_on_unseen_data(subject_ids ,client):
 	
 	# load trained model 
 	model = MultiTaskSeqGRUAE(input_dim=X.shape[-1], latent_dim=64, SupCon_latent_dim=32, pooling="mean+max+final")
-	model.load_state_dict(torch.load("project/model/model.pt", weights_only=True))
-	model.eval()
+	model.load_state_dict(torch.load("project/model/model.pt", map_location=device, weights_only=True))
+	model.to(device).eval()
 	
 	# run model 
 	pred_logits = predict_logits(model, X, mask)

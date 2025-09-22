@@ -4,9 +4,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader, Sampler
 
-from model.dataset import TimeSeriesDataset, BalancedPositivesPerTaskSampler
-from model.model import MultiTaskSeqGRUAE
-from model.loss import masked_mse, SupConLoss, focal_bce_with_logits
+from project.model.dataset import TimeSeriesDataset, BalancedPositivesPerTaskSampler
+from project.model.model import MultiTaskSeqGRUAE
+from project.model.loss import masked_mse, SupConLoss, focal_bce_with_logits
 
 import os, random
 

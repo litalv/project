@@ -49,6 +49,8 @@ def split_data(X, y, groups_df):
 def data_norm(df, numeric_cols, scaler=None):
 	""" Standardize numeric features 
 		scaler is fitted over TRAIN only so if train->scaler=None else not None """
+	# ensure numeric columns are float (avoids dtype assignment warnings/errors)
+	df.loc[:, numeric_cols] = df[numeric_cols].astype(np.float64)
 	if scaler is None:
 		scaler = StandardScaler()
 		scaler.fit(df[numeric_cols])

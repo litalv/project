@@ -160,3 +160,39 @@ def train_multitask_seq_ae(
 		# print(f"[Epoch {ep:02d}] total={running['total']:.4f}  recon={running['recon']:.4f}  "f"bce={running['bce']:.4f}  supcon={running['supcon']:.4f}")
 
 	return model, running_total
+
+def train_model(X_train, y_train, mask_train, seed=42):
+	train_N_pos = y_train.sum(axis=0)
+	train_N_neg = y_train.shape[0] - y_train.sum(axis=0)
+	beta = 0.999
+
+	weights_bce = train_N_neg / train_N_pos
+	weights_supcon = (1.0 - beta) / (1.0 - (beta ** train_N_pos))
+
+	return train_multitask_seq_ae(
+			X_train, y_train, mask_train,
+			input_dim=X_train.shape[-1],
+			batch_size=64,
+			p_per_task=6, # ensure ≥6 positives per task per batch
+			epochs=20,
+			scale_warmup_epochs=1,
+			lr_warmup_epochs=0,
+
+			warmup_scales={'lambda_recon':1.0, 'lambda_bce':0.0, 'lambda_supcon':1.0},
+			scales={'lambda_recon':0.2, 'lambda_bce':1, 'lambda_supcon':2.0},
+
+			warmup_lrs={'AE':0, 'BCE':[0, 0, 0], 'SupCon':0},
+			lrs={'AE':1e-3, 'BCE':[1e-3, 1e-3, 1e-4], 'SupCon':1e-3},
+
+			latent_dim=64, 
+			SupCon_latent_dim=32,
+
+			pooling_mode ="mean+max+final", 
+
+			weights_bce=weights_bce,
+			weights_supcon=weights_supcon,
+			temperature=0.07, 
+			supcon_gamma=0.7,
+			supcon_delta=0.5,
+			seed=seed
+		)

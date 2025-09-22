@@ -4,9 +4,6 @@ import pickle as pkl
 import torch
 
 import duckdb
-# Mount Google Drive
-from google.colab import drive
-drive.mount('/content/drive')
 
 from project.preprocessing.utils import load_file, sql_from_MIMICIII, age, ethnicity_to_ohe, split_data, data_norm, imputation_by_baseline, generate_series_data
 from project.preprocessing.config import get_config

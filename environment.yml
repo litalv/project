@@ -12,5 +12,6 @@ dependencies:
   - pytorch=2.4
   - torchvision
   - pip
+  - tensorflow
   - pip:
       - shap
